@@ -413,8 +413,7 @@ function fire_task!(ctx, thunk, proc, state)
     sch_handle = SchedulerHandle(ThunkID(thunk.id), state.worker_chans[proc.pid]...)
     state.worker_pressure[proc.pid] += 1
     async_apply(proc, thunk.id, thunk.f, data, state.chan, thunk.get_result,
-                thunk.persist, thunk.cache, options, ids, ctx.log_sink,
-                sch_handle, thunk.meta)
+                thunk.persist, thunk.cache, thunk.meta, options, ids, sch_handle, ctx)
 end
 
 function finish_task!(state, node, thunk_failed; free=true)
@@ -507,8 +506,8 @@ function start_state(deps::Dict, node_order, chan)
     state
 end
 
-@noinline function do_task(thunk_id, f, data, send_result, persist, cache, options, ids, log_sink, sch_handle, meta)
-    ctx = Context(Processor[]; log_sink=log_sink)
+@noinline function do_task(thunk_id, f, data, send_result, persist, cache, meta, options, ids, sch_handle, ctx_vars)
+    ctx = Context(Processor[]; log_sink=ctx_vars.log_sink, profile=ctx_vars.profile)
     # TODO: Time choose_processor
     Tdata = map(x->x isa Chunk ? chunktype(x) : x, data)
     to_proc = choose_processor(options, f, Tdata)
@@ -524,7 +523,7 @@ end
             end
         end)
     end
-    @dbg timespan_start(ctx, :compute, thunk_id, f)
+    @dbg timespan_start(ctx, :compute, thunk_id, (f, to_proc))
     res = nothing
     result_meta = try
         # Set TLS variables
@@ -542,17 +541,18 @@ end
         bt = catch_backtrace()
         RemoteException(myid(), CapturedException(ex, bt))
     end
-    @dbg timespan_end(ctx, :compute, thunk_id, (f, to_proc, typeof(res), sizeof(res)))
+    @dbg timespan_end(ctx, :compute, thunk_id, (f, to_proc))
     metadata = (pressure=ACTIVE_TASKS[],)
     (result_meta, metadata)
 end
 
-@noinline function async_apply(p::OSProc, thunk_id, f, data, chan, send_res, persist, cache, options, ids, log_sink, sch_handle, meta)
+@noinline function async_apply(p::OSProc, thunk_id, f, data, chan, send_res, persist, cache, options, meta, ids, sch_handle, ctx)
     @async begin
         try
             put!(chan, (p.pid, thunk_id, remotecall_fetch(do_task, p.pid, thunk_id, f, data,
-                                                          send_res, persist, cache, options, ids,
-                                                          log_sink, sch_handle, meta)))
+                                                          send_res, persist, cache, meta, options, ids,
+                                                          sch_handle, (log_sink=ctx.log_sink,
+                                                                       profile=ctx.profile))))
         catch ex
             bt = catch_backtrace()
             put!(chan, (p.pid, thunk_id, (CapturedException(ex, bt), nothing)))
