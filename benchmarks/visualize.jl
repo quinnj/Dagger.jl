@@ -2,7 +2,7 @@ using JLD
 using BenchmarkTools
 using TypedTables
 
-res = JLD.load(ARGS[1]) 
+res = JLD.load(ARGS[1])
 
 serial_results = res["results"]["Serial"]
 dagger_results = res["results"]["Dagger"]
@@ -24,10 +24,10 @@ end
 dtable = table[table.name .== :Dagger]
 
 # Plotting
-# - TODO: Fix color selection
 
 using CairoMakie
-using ColorSchemes 
+using Colors, ColorSchemes 
+
 
 # 1. Strong scaling analysis
 #   - Keep the problem size constant
@@ -43,9 +43,11 @@ ssp.ylabel = "Scaling efficiency"
 line_plots = Any[]
 legend_names = String[]
 
-colors = ColorSchemes.seaborn_deep
+scales = unique(dtable.scale)
 
-for (i, scale) in enumerate(unique(dtable.scale))
+colors = distinguishable_colors(lenght(scales), ColorSchemes.seaborn_deep.colors)
+
+for (i, scale) in enumerate(scales)
     stable = dtable[dtable.scale .== scale]
     t1 = first(stable[stable.procs .== 1].time)
     ss_efficiency = strong_scaling.(t1, stable.time, stable.procs)
@@ -70,7 +72,6 @@ wstable = filter(row->row.scale == row.procs, dtable)
 wstable = sort(wstable, by=r->r.scale)
 t1 = first(wstable).time
 
-
 fig = Figure(resolution = (1200, 800))
 perf = fig[1, 1] = Axis(fig, title = "Weak scaling")
 perf.xlabel = "nprocs"
@@ -82,22 +83,24 @@ save("weak_scaling.png", fig)
 # 3. Comparision against Base
 
 fig = Figure(resolution = (1200, 800))
-perf = fig[1, 1] = Axis(fig, title = "Dagger vs Base")
+perf = fig[1, 1] = Axis(fig, title = "DaggerArrays vs Base")
 perf.xlabel = "Scaling factor"
 perf.ylabel = "time (s)"
 
 line_plots = Any[]
 legend_names = String[]
 
-colors = ColorSchemes.seaborn_deep
+procs = unique(dtable.procs)
 
-for (i, nproc) in enumerate(unique(dtable.procs))
+colors = distinguishable_colors(lenght(procs) + 1, ColorSchemes.seaborn_deep.colors)
+
+for (i, nproc) in enumerate(procs)
     stable = dtable[dtable.procs .== nproc]
     push!(line_plots, lines!(perf, stable.scale, stable.time, linewidth=3.0, color = colors[i]))
     push!(legend_names, "Dagger (nprocs = $nproc)")
 end
 
-push!(line_plots, lines!(perf, btable.scale, btable.time, linewidth=3.0, color = colors[length(unique(dtable.procs)) + 1]))
+push!(line_plots, lines!(perf, btable.scale, btable.time, linewidth=3.0, color = colors[end]))
 push!(legend_names, "Base (threads = 8)")
 
 legend = fig[1, 2] = Legend(fig, line_plots, legend_names)
@@ -113,11 +116,14 @@ speedup.ylabel = "Speedup Base/Dagger"
 line_plots = Any[]
 legend_names = String[]
 
-colors = ColorSchemes.seaborn_deep
+colors = distinguishable_colors(length(procs), ColorSchemes.seaborn_deep.colors)
+
+sort!(btable, by=r->r.scale)
 
 for (i, nproc) in enumerate(unique(dtable.procs))
     nproc < 8 && continue
     stable = dtable[dtable.procs .== nproc]
+    sort!(stable, by=r->r.scale)
     push!(line_plots, lines!(speedup, stable.scale, btable.time ./ stable.time, linewidth=3.0, color = colors[i]))
     push!(legend_names, "Dagger (nprocs = $nproc)")
 end
