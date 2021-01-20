@@ -82,7 +82,7 @@ save("weak_scaling.png", fig)
 # 3. Comparision against Base
 
 fig = Figure(resolution = (1200, 800))
-perf = fig[1, 1] = Axis(fig, title = "DaggerArrays vs Base")
+perf = fig[1, 1] = Axis(fig, title = "Dagger vs Base")
 perf.xlabel = "Scaling factor"
 perf.ylabel = "time (s)"
 
