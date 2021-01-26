@@ -546,7 +546,7 @@ end
     (result_meta, metadata)
 end
 
-@noinline function async_apply(p::OSProc, thunk_id, f, data, chan, send_res, persist, cache, options, meta, ids, sch_handle, ctx)
+@noinline function async_apply(p::OSProc, thunk_id, f, data, chan, send_res, persist, cache, meta, options, ids, sch_handle, ctx)
     @async begin
         try
             put!(chan, (p.pid, thunk_id, remotecall_fetch(do_task, p.pid, thunk_id, f, data,
